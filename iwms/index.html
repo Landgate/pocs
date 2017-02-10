@@ -73,7 +73,7 @@
         // Define the single layer that will be displayed as an image layer on the map.
         // This layer will be used as the source of the shape to use for the intersects query.
         var cadNoAttributes = new MapImageLayer({
-          url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer",
+          url: "https://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer",
           sublayers: [{
               id: "5"
           }],
@@ -83,7 +83,7 @@
         // This is just a shortcut to the above layer. The shortcut is used for the query to return the geometry of the 
         // cadastral parcel identified by the query. 
         var parcelLayer = {
-            url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer/5",
+            url: "https://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer/5",
         };
 
         // ################
@@ -91,19 +91,19 @@
         // This is the list of layers that the intersections query will be run.
         var queryLayerObjects = [
             new FeatureLayer({
-                url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer",
+                url: "https://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer",
                 layerId: "5",
                 outFields: ["*"],
                 visible: false
             }),
             new FeatureLayer({
-                url: "http://services.slip.wa.gov.au/public/rest/services/DMP_Public_Services/DMP_Public_Services/MapServer",
+                url: "https://services.slip.wa.gov.au/public/rest/services/DMP_Public_Services/DMP_Public_Services/MapServer",
                 layerId: "5",
                 outFields: ["*"],
                 visible: false
             }),
             new FeatureLayer({
-                url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Native_Title_Public_Services/MapServer",
+                url: "https://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Native_Title_Public_Services/MapServer",
                 layerId: "0",
                 outFields: ["*"],
                 visible: false
@@ -112,13 +112,13 @@
 
         // This is just a shortcut to the above layers.
         var queryLayers = [{
-            url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer/5",
+            url: "https://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer/5",
             name: "Cadastre (Polygon)"
         },{
-            url: "http://services.slip.wa.gov.au/public/rest/services/DMP_Public_Services/DMP_Public_Services/MapServer/5",
+            url: "https://services.slip.wa.gov.au/public/rest/services/DMP_Public_Services/DMP_Public_Services/MapServer/5",
             name: "Mining Tenements"
         },{
-            url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Native_Title_Public_Services/MapServer/0",
+            url: "https://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Native_Title_Public_Services/MapServer/0",
             name: "Native Title (NNTT)"
         }];
 
