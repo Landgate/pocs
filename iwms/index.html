@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>iWMS Proof of Concept</title>
+
+  <link rel="stylesheet" href="https://js.arcgis.com/4.2/esri/css/main.css">
+  <script src="https://js.arcgis.com/4.2/"></script>
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+  <link rel="stylesheet" href="https://code.getmdl.io/1.3.0/material.indigo-pink.min.css">
+  <script defer src="https://code.getmdl.io/1.3.0/material.min.js"></script>
+
+  <style>
+    #layers_list {
+        margin-top: -50px;
+    }
+
+    #layers_list .mdl-list__item {
+        height: 72px;
+        padding-top: 0px;
+        padding-bottom: 0px;
+    }
+
+    main > .mdl-grid {
+      margin: 0px;
+      padding: 0px;
+    }
+
+    main #sceneDiv {
+      height: 100%;
+      width: 100%;
+      position: absolute;
+      margin: 0px;
+      padding: 0px;
+    }
+  </style>
+
+  <script>
+    require([
+        "esri/config",
+        "esri/Map",
+        "esri/views/MapView",
+        "esri/layers/GraphicsLayer",
+        "esri/layers/FeatureLayer",
+        "esri/layers/MapImageLayer",
+        "esri/Graphic",
+        "esri/symbols/SimpleFillSymbol",
+        "esri/symbols/SimpleMarkerSymbol",
+        "esri/geometry/Point",
+        "esri/tasks/QueryTask",
+        "esri/tasks/support/Query",
+        "dojo/dom",
+        "dojo/dom-attr",
+        "dojo/dom-construct",
+        "dojo/on",
+        "dojo/domReady!"
+      ],
+      function(
+        esriConfig,
+        Map, MapView, 
+        GraphicsLayer, FeatureLayer, MapImageLayer, 
+        Graphic,
+        SimpleFillSymbol,
+        SimpleMarkerSymbol,
+        Point, 
+        QueryTask, Query, 
+        dom, domAttr, domConstruct, on
+      ) {
+        // ################
+
+        // Define the single layer that will be displayed as an image layer on the map.
+        // This layer will be used as the source of the shape to use for the intersects query.
+        var cadNoAttributes = new MapImageLayer({
+          url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer",
+          sublayers: [{
+              id: "5"
+          }],
+          opacity: 0.9
+        });
+
+        // This is just a shortcut to the above layer. The shortcut is used for the query to return the geometry of the 
+        // cadastral parcel identified by the query. 
+        var parcelLayer = {
+            url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer/5",
+        };
+
+        // ################
+
+        // This is the list of layers that the intersections query will be run.
+        var queryLayerObjects = [
+            new FeatureLayer({
+                url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer",
+                layerId: "5",
+                outFields: ["*"],
+                visible: false
+            }),
+            new FeatureLayer({
+                url: "http://services.slip.wa.gov.au/public/rest/services/DMP_Public_Services/DMP_Public_Services/MapServer",
+                layerId: "5",
+                outFields: ["*"],
+                visible: false
+            }),
+            new FeatureLayer({
+                url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Native_Title_Public_Services/MapServer",
+                layerId: "0",
+                outFields: ["*"],
+                visible: false
+            })
+        ];
+
+        // This is just a shortcut to the above layers.
+        var queryLayers = [{
+            url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Cadastre_Public_Services/MapServer/5",
+            name: "Cadastre (Polygon)"
+        },{
+            url: "http://services.slip.wa.gov.au/public/rest/services/DMP_Public_Services/DMP_Public_Services/MapServer/5",
+            name: "Mining Tenements"
+        },{
+            url: "http://services.slip.wa.gov.au/public/rest/services/Landgate_Public_Services/Native_Title_Public_Services/MapServer/0",
+            name: "Native Title (NNTT)"
+        }];
+
+        // ################
+
+        // This is the pointers to the DOM elements on the webpage to (1) the list of layers
+        // (2) the buffer slider element
+        var listNode = dom.byId("layers_list");
+        var bufferSlider = dom.byId("buffer");
+
+        /*****************************************************************
+         * Create the map constructor and add our layer to visually display.
+         *****************************************************************/
+        var map = new Map({
+          basemap: "dark-gray",
+          layers: [cadNoAttributes]
+        });
+
+        // Define the default view of the map (zoom level and center point of the map)
+        var view = new MapView({
+          container: "sceneDiv",
+          map: map,
+          center: [115.60, -31.5],
+          zoom: 16
+        });
+
+        /*****************************************************************
+         * Layers are promises that resolve when loaded, or when all their
+         * properties may be accessed. Once the population layer has loaded,
+         * the view will animate to it's initial extent.
+         *****************************************************************/
+        // view.then(function() {
+        //   shipwrecksLyr.then(function() {
+        //     view.goTo(shipwrecksLyr.fullExtent);
+        //   });
+        // });
+
+        // var streetsLyrToggle = dom.byId("streetsLyr");
+
+        // This initialises the buffer element so it's available for use by the user
+        on(bufferSlider, "input", function() {
+          dom.byId("buffer-value").innerText = bufferSlider.value + "m";
+        });
+
+        // Listen for click event on the map, when the user clicks on the map call doParcelGeomQuery function.
+        // Send the `mapPoint` representing the lat and lon coordinates the user clicked back to the SLIP service.
+        view.on("click", function(evt) {
+            // Clear the results from any previous queries
+            domConstruct.empty(listNode);
+
+            // Get geometry of this cadastral parcel underneath this point
+            doParcelGeomQuery(evt.mapPoint, parcelLayer, function(results) {
+                // Add the shape of the geomtry returned from the query to the map.
+                // This displays as a light blue polygon for the user to easily visualise the area being considered
+                // as part of the intersects query.
+                var bufferGraphic = new Graphic({
+                    geometry: results.features[0].geometry,
+                    symbol: new SimpleFillSymbol({
+                        outline: {
+                            width: 1.5,
+                            color: [0, 191, 255, 0.5]
+                        },
+                        style: "none"
+                    })
+                });
+                view.graphics.removeAll();
+                view.graphics.add(bufferGraphic);
+
+                // Execute the intersects query for all layers we wish to consider.
+                for(var i = 0; i < queryLayers.length; i++) {
+                    var layer = queryLayers[i];
+                    doLayerQuery(layer, results.features[0].geometry);
+                }
+            });
+        });
+
+        /**
+         * This function runs the query to retrieve the geometry that intersects the point
+         * the user has clicked. This supplies the geometry to the further intersects calls against others layers.
+         * 
+         * point: MapPoint => A ESRI JavaScript API MapPoint object containing the latitude and longitude.
+         * layer: Object => A JavaScript object containing a `url` field of the layer to query.
+         * getResults: function => The callback function to execute to receive the results of the query.
+        */
+        function doParcelGeomQuery(point, layer, getResults) {
+            var qTask = new QueryTask({
+                url: layer.url
+            });
+
+            var params = new Query({
+                geometry: point,
+                spatialRelationship: "intersects",
+                returnGeometry: true,
+                outFields: [],
+            });
+
+            qTask.execute(params)
+                .then(getResults) // Call the getResults callback function to do something with the results
+                .otherwise(function() {
+                    // This is where error handling would go if the request failed.
+                    console.log("Promise rejected", arguments);
+                });
+        }
+
+        /**
+         * This function runs a query to find all features in a layer that intersects with the geometry supplied.
+         * 
+         * layer: Object => A JavaScript object containing a `url` and `name` fields of the layer to query.
+         * geometry: Object => A GeoJSON object containing the geometry (typically, a polygon) to query against.
+        */
+        function doLayerQuery(layer, geometry) {
+            var qTask = new QueryTask({
+                url: layer.url
+            });
+
+            // Read the buffer distance from the buffer slider.
+            var bufferDistance = parseInt(bufferSlider.value);
+
+            var params = new Query({
+                geometry: geometry,
+                spatialRelationship: "intersects",
+                returnGeometry: true,
+                outFields: ["*"], // Return all attributes alongside the geometry
+                units: "esriSRUnit_Meter", // Specify that the buffer distance are in metres
+                distance: bufferDistance
+            });
+
+            // Update the app with the template HTML for the layer results list
+            var fragment = domConstruct.toDom('' +
+                '<li class="mdl-list__item mdl-list__item--three-line">' +
+                    '<span class="mdl-list__item-primary-content">' +
+                        '<span>' + layer.name + '</span>' +
+                        '<span class="mdl-list__item-text-body" id="layer-' + layer.name + '">' +
+                            '<div class="mdl-spinner mdl-js-spinner is-active"></div>' +
+                        '</span>' +
+                    '</span>' +
+                    '<span class="mdl-list__item-secondary-content">' +
+                        // '<a class="mdl-list__item-secondary-action" href="#"><i class="material-icons">check</i></a>' +
+                    '</span>' +
+                '</li>');
+            componentHandler.upgradeElement(fragment); // upgradeElement is only required by the MaterilDesign Lite library used for the UI of this app
+            domConstruct.place(fragment, listNode);
+
+            // Run an `executeForCount` query to simply return the number of intersecting features for this layer.
+            // This could be changed to `execute` to return the attributes of the features as well.
+            // https://developers.arcgis.com/javascript/latest/api-reference/esri-tasks-QueryTask.html
+            qTask.executeForCount(params)
+                .then(function(count) {
+                    // Insert the count of features from this query for the relevant layer
+                    // This references the <span id="layer-..."> element created in the HTML above
+                    dom.byId("layer-" + layer.name).textContent = count + ' Record(s)';
+                })
+                .otherwise(function() {
+                    // This is where error handling would go if the request failed.
+                    console.log("Promise rejected", arguments);
+                });
+        };
+      });
+  </script>
+</head>
+
+<body>
+    <!-- No header, and the drawer stays open on larger screens (fixed drawer). -->
+    <div class="mdl-layout mdl-js-layout mdl-layout--fixed-drawer">
+        <div class="mdl-layout__drawer">
+            <span class="mdl-layout-title">iWMS POC</span>
+
+            <ul class="demo-list-three mdl-list">
+                <li class="mdl-list__item mdl-list__item--two-line">
+                    <span class="mdl-list__item-primary-content">
+                        <span>Buffer</span>
+                        <span class="mdl-list__item-text-body">
+                            <input class="mdl-slider mdl-js-slider" id="buffer" type="range"
+    min="0" max="100" value="10" tabindex="0">
+                        </span>
+                    </span>
+                    <span class="mdl-list__item-secondary-content">
+                        <span id="buffer-value">10m</span>
+                    </span>
+                </li>
+                <li class="mdl-list__item mdl-list__item--three-line">
+                    <span class="mdl-list__item-primary-content">
+                        <span class="mdl-list__item-text-body">
+                            <strong>Tip:</strong> Click anywhere on the map to query intersecting datasets.
+                        </span>
+                    </span>
+                </li>
+            </ul>
+
+            <ul class="mdl-list" id="layers_list">
+
+            </ul>
+        </div>
+        <main class="mdl-layout__content">
+            <div class="mdl-grid">
+                <div class="mdl-cell mdl-cell--12-col" id="sceneDiv">&nbsp;</div>
+            </div>
+        </main>
+    </div>
+</body>
+
+</html>
